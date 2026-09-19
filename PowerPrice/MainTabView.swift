@@ -17,6 +17,11 @@ struct MainTabView: View {
                 .tabItem {
                     Label("Canasta", systemImage: "cart.fill")
                 }
+                
+            ProfileView()
+                .tabItem {
+                    Label("Perfil", systemImage: "person.fill")
+                }
         }
     }
 }

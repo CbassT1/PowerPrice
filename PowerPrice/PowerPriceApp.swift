@@ -5,7 +5,7 @@ import SwiftData
 struct PowerPriceApp: App {
     var body: some Scene {
         WindowGroup {
-            MainTabView()
+            RootView()
         }
         .modelContainer(for: ProductItem.self)
     }

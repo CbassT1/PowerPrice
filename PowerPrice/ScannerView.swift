@@ -15,9 +15,9 @@ struct ScannerView: View {
         NavigationStack {
             VStack {
                 ZStack {
-                    Rectangle()
-                        .fill(Color.black.opacity(0.85))
+                    CameraPreview()
                         .frame(maxWidth: .infinity, maxHeight: 400)
+                        .clipped()
                     
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(Color.green, lineWidth: 3)
@@ -27,14 +27,14 @@ struct ScannerView: View {
                         .resizable()
                         .scaledToFit()
                         .frame(width: 150)
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(.white.opacity(0.3))
                 }
                 .onTapGesture {
                     productName = "Leche Entera 1L"
                     isShowingForm = true
                 }
                 
-                Text("Toca el visor para simular escaneo")
+                Text("Apunta al código y toca la cámara para simular")
                     .padding()
                 
                 Spacer()

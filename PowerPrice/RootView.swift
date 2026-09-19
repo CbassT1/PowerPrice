@@ -1,8 +1,17 @@
-//
-//  RootView.swift
-//  PowerPrice
-//
-//  Created by Sebas treviño on 18/09/26.
-//
+import SwiftUI
 
-import Foundation
+struct RootView: View {
+    @AppStorage("isLoggedIn") private var isLoggedIn: Bool = false
+    
+    var body: some View {
+        if isLoggedIn {
+            MainTabView()
+        } else {
+            LoginView()
+        }
+    }
+}
+
+#Preview {
+    RootView()
+}
