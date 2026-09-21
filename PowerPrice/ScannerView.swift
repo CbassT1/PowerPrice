@@ -4,12 +4,17 @@ import SwiftData
 struct ScannerView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var isShowingForm = false
+    
+    // Variables limpias sin hardcodear
     @State private var productName = ""
     @State private var price = ""
-    @State private var selectedStore = "Soriana"
+    @State private var selectedStore = "Seleccionar..."
     @State private var customStore = ""
     
-    let stores = ["Soriana", "H-E-B", "Walmart", "Bodega Aurrera", "Mercado Local", "Otra"]
+    let stores = ["Seleccionar...", "Soriana", "H-E-B", "Walmart", "Bodega Aurrera", "Mercado Local", "Otra"]
+    
+    // Teclado
+    @FocusState private var isInputActive: Bool
     
     var body: some View {
         NavigationStack {
@@ -30,7 +35,11 @@ struct ScannerView: View {
                         .foregroundColor(.white.opacity(0.3))
                 }
                 .onTapGesture {
-                    productName = "Leche Entera 1L"
+                    // Limpiamos los campos antes de mostrar el formulario
+                    productName = ""
+                    price = ""
+                    selectedStore = "Seleccionar..."
+                    customStore = ""
                     isShowingForm = true
                 }
                 
@@ -44,12 +53,14 @@ struct ScannerView: View {
                 NavigationStack {
                     Form {
                         Section(header: Text("Producto Detectado")) {
-                            TextField("Nombre", text: $productName)
+                            TextField("Nombre del producto", text: $productName)
+                                .focused($isInputActive)
                         }
                         
                         Section(header: Text("Precio Actual")) {
                             TextField("Precio", text: $price)
                                 .keyboardType(.decimalPad)
+                                .focused($isInputActive)
                         }
                         
                         Section(header: Text("Comercio")) {
@@ -61,20 +72,21 @@ struct ScannerView: View {
                             
                             if selectedStore == "Otra" {
                                 TextField("Nombre de la tienda", text: $customStore)
+                                    .focused($isInputActive)
                             }
                         }
                     }
                     .navigationTitle("Aportar Precio")
                     .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button("Listo") { isInputActive = false }
+                        }
                         ToolbarItem(placement: .navigationBarLeading) {
-                            Button("Cancelar") {
-                                isShowingForm = false
-                            }
+                            Button("Cancelar") { isShowingForm = false }
                         }
                         ToolbarItem(placement: .navigationBarTrailing) {
-                            Button("Guardar") {
-                                guardarProducto()
-                            }
+                            Button("Guardar") { guardarProducto() }
                         }
                     }
                 }
@@ -84,19 +96,10 @@ struct ScannerView: View {
     
     func guardarProducto() {
         let finalStore = selectedStore == "Otra" ? customStore : selectedStore
-        if let priceValue = Double(price), !productName.isEmpty, !finalStore.isEmpty {
+        if let priceValue = Double(price), !productName.isEmpty, finalStore != "Seleccionar...", !finalStore.isEmpty {
             let newItem = ProductItem(name: productName, store: finalStore, price: priceValue)
             modelContext.insert(newItem)
-            
-            productName = ""
-            price = ""
-            selectedStore = "Soriana"
-            customStore = ""
             isShowingForm = false
         }
     }
-}
-
-#Preview {
-    ScannerView()
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 struct ProfileView: View {
     @AppStorage("isLoggedIn") private var isLoggedIn: Bool = true
@@ -6,12 +7,20 @@ struct ProfileView: View {
     @AppStorage("userEmail") private var userEmail: String = ""
     @AppStorage("favoriteStoresData") private var favoriteStoresData: String = ""
     
-    let availableStores = ["Soriana", "H-E-B", "Walmart", "Bodega Aurrera", "Mercadito Local"]
+    // Control del teclado
+    @FocusState private var isInputActive: Bool
     
-    // Propiedad calculada de solo lectura para obtener el Set
-    var favoriteStores: Set<String> {
+    // Selección de fotografía
+    @State private var avatarItem: PhotosPickerItem?
+    @State private var avatarImage: Image?
+    
+    // Hoja para agregar tiendas
+    @State private var isShowingStorePicker = false
+    let allStores = ["Soriana", "H-E-B", "Walmart", "Bodega Aurrera", "Mercadito Local", "Chedraui", "S-Mart", "City Club", "Sam's Club"]
+    
+    var favoriteStores: [String] {
         if favoriteStoresData.isEmpty { return [] }
-        return Set(favoriteStoresData.components(separatedBy: ","))
+        return favoriteStoresData.components(separatedBy: ",")
     }
     
     var body: some View {
@@ -21,47 +30,64 @@ struct ProfileView: View {
                     HStack {
                         Spacer()
                         VStack {
-                            Image(systemName: "person.crop.circle.fill")
-                                .resizable()
-                                .frame(width: 80, height: 80)
-                                .foregroundColor(.gray)
+                            if let avatarImage {
+                                avatarImage
+                                    .resizable()
+                                    .scaledToFill()
+                                    .frame(width: 80, height: 80)
+                                    .clipShape(Circle())
+                            } else {
+                                Image(systemName: "person.crop.circle.fill")
+                                    .resizable()
+                                    .frame(width: 80, height: 80)
+                                    .foregroundColor(.gray)
+                            }
                             
-                            Text("Cambiar fotografía")
+                            PhotosPicker("Cambiar fotografía", selection: $avatarItem, matching: .images)
                                 .font(.caption)
                                 .foregroundColor(.blue)
+                                .onChange(of: avatarItem) {
+                                    Task {
+                                        if let loaded = try? await avatarItem?.loadTransferable(type: Image.self) {
+                                            avatarImage = loaded
+                                        }
+                                    }
+                                }
                         }
                         Spacer()
                     }
                     .padding(.vertical, 10)
                     
                     TextField("Nombre", text: $userName)
+                        .focused($isInputActive)
+                    
                     TextField("Correo", text: $userEmail)
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
+                        .focused($isInputActive)
                 } header: {
                     Text("Datos del Usuario")
                 }
                 
                 Section {
-                    ForEach(availableStores, id: \.self) { store in
-                        Toggle(store, isOn: Binding(
-                            get: { favoriteStores.contains(store) },
-                            set: { isSelected in
-                                var currentSet = favoriteStores
-                                if isSelected {
-                                    currentSet.insert(store)
-                                } else {
-                                    currentSet.remove(store)
-                                }
-                                // Modificamos directamente la variable @AppStorage
-                                favoriteStoresData = currentSet.joined(separator: ",")
-                            }
-                        ))
+                    ForEach(favoriteStores, id: \.self) { store in
+                        Text(store)
+                    }
+                    .onDelete(perform: removeStore)
+                    
+                    Button(action: {
+                        isShowingStorePicker = true
+                    }) {
+                        HStack {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundColor(.green)
+                            Text("Agregar supermercado")
+                        }
                     }
                 } header: {
                     Text("Supermercados Favoritos")
                 } footer: {
-                    Text("Personalizaremos tu canasta en base a tus tiendas preferidas.")
+                    Text("Desliza hacia la izquierda sobre una tienda para eliminarla.")
                 }
                 
                 Section {
@@ -75,10 +101,53 @@ struct ProfileView: View {
                 }
             }
             .navigationTitle("Mi Cuenta")
+            // Botón "Listo" para ocultar el teclado
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Listo") {
+                        isInputActive = false
+                    }
+                }
+            }
+            // Hoja emergente para seleccionar más tiendas
+            .sheet(isPresented: $isShowingStorePicker) {
+                NavigationStack {
+                    List {
+                        ForEach(allStores.filter { !favoriteStores.contains($0) }, id: \.self) { store in
+                            Button(action: {
+                                addStore(store)
+                                isShowingStorePicker = false
+                            }) {
+                                Text(store)
+                                    .foregroundColor(.primary)
+                            }
+                        }
+                    }
+                    .navigationTitle("Seleccionar Tienda")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Cancelar") {
+                                isShowingStorePicker = false
+                            }
+                        }
+                    }
+                }
+                .presentationDetents([.medium])
+            }
         }
     }
-}
-
-#Preview {
-    ProfileView()
+    
+    func addStore(_ store: String) {
+        var current = favoriteStores
+        current.append(store)
+        favoriteStoresData = current.joined(separator: ",")
+    }
+    
+    func removeStore(at offsets: IndexSet) {
+        var current = favoriteStores
+        current.remove(atOffsets: offsets)
+        favoriteStoresData = current.joined(separator: ",")
+    }
 }
