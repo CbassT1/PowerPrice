@@ -12,19 +12,12 @@ struct SavingsBasketView: View {
     @AppStorage("cartItemsData") private var cartItemsData: Data = Data()
     
     var carrito: [CartItem] {
-        get {
-            if let decoded = try? JSONDecoder().decode([CartItem].self, from: cartItemsData) { return decoded }
-            return []
-        }
-        set {
-            if let encoded = try? JSONEncoder().encode(newValue) { cartItemsData = encoded }
-        }
+        get { if let decoded = try? JSONDecoder().decode([CartItem].self, from: cartItemsData) { return decoded }; return [] }
     }
     
-    // Función que agrupa automáticamente los productos por tienda
-    var productosAgrupados: [String: [CartItem]] {
-        Dictionary(grouping: carrito, by: { $0.store })
-    }
+    var productosAgrupados: [String: [CartItem]] { Dictionary(grouping: carrito, by: { $0.store }) }
+    
+    var totalGlobal: Double { carrito.reduce(0) { $0 + $1.price } }
     
     var body: some View {
         NavigationStack {
@@ -32,57 +25,96 @@ struct SavingsBasketView: View {
                 Color(UIColor.systemGroupedBackground).ignoresSafeArea()
                 
                 if carrito.isEmpty {
+                    // Estado Vacío Moderno
                     VStack(spacing: 20) {
-                        Image(systemName: "cart")
-                            .font(.system(size: 60))
-                            .foregroundColor(.gray)
+                        Image(systemName: "basket.fill")
+                            .font(.system(size: 80))
+                            .foregroundColor(.blue.opacity(0.3))
                         Text("Tu canasta está vacía")
-                            .font(.headline)
+                            .font(.title2).bold()
+                            .foregroundColor(.primary)
+                        Text("Busca productos y agrégalos para comparar tus ahorros.")
+                            .font(.subheadline)
                             .foregroundColor(.gray)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
                     }
                 } else {
-                    List {
-                        // Iteramos sobre las tiendas ordenadas alfabéticamente
-                        ForEach(productosAgrupados.keys.sorted(), id: \.self) { tienda in
-                            Section(header: Text(tienda).font(.headline)) {
-                                ForEach(productosAgrupados[tienda] ?? []) { item in
-                                    HStack {
-                                        Text(item.name)
-                                        Spacer()
-                                        Text("$\(item.price, specifier: "%.2f")")
-                                            .bold()
+                    VStack(spacing: 0) {
+                        List {
+                            ForEach(productosAgrupados.keys.sorted(), id: \.self) { tienda in
+                                Section {
+                                    ForEach(productosAgrupados[tienda] ?? []) { item in
+                                        HStack {
+                                            Text(item.name)
+                                                .font(.body)
+                                            Spacer()
+                                            Text("$\(item.price, specifier: "%.2f")")
+                                                .font(.headline)
+                                        }
+                                        .padding(.vertical, 4)
                                     }
-                                }
-                                .onDelete { offsets in
-                                    eliminarProducto(de: tienda, en: offsets)
-                                }
-                                
-                                // Subtotal por tienda
-                                HStack {
-                                    Text("Subtotal")
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
-                                    Spacer()
-                                    Text("$\(subtotal(para: tienda), specifier: "%.2f")")
-                                        .font(.subheadline)
-                                        .bold()
-                                        .foregroundColor(.blue)
+                                    .onDelete { offsets in
+                                        eliminarProducto(de: tienda, en: offsets)
+                                    }
+                                    
+                                    // Subtotal de la tienda
+                                    HStack {
+                                        Text("Subtotal")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                        Spacer()
+                                        Text("$\(subtotal(para: tienda), specifier: "%.2f")")
+                                            .font(.subheadline).bold()
+                                            .foregroundColor(.blue)
+                                    }
+                                    .padding(.top, 8)
+                                } header: {
+                                    HStack {
+                                        Image(systemName: "storefront.fill")
+                                        Text(tienda)
+                                    }
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
+                                    .textCase(nil)
                                 }
                             }
                         }
+                        .listStyle(.insetGrouped)
+                        
+                        // Panel flotante del Total
+                        VStack {
+                            HStack {
+                                Text("Total Estimado")
+                                    .font(.headline)
+                                    .foregroundColor(.gray)
+                                Spacer()
+                                Text("$\(totalGlobal, specifier: "%.2f")")
+                                    .font(.title).bold()
+                                    .foregroundColor(.primary)
+                            }
+                            
+                            Button(action: {
+                                withAnimation { cartItemsData = Data() }
+                            }) {
+                                Text("Vaciar Canasta")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.red.opacity(0.9))
+                                    .cornerRadius(14)
+                            }
+                            .padding(.top, 10)
+                        }
+                        .padding(20)
+                        .background(Color(UIColor.secondarySystemGroupedBackground))
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                        .shadow(color: .black.opacity(0.05), radius: 10, y: -5)
                     }
-                    .listStyle(.insetGrouped)
                 }
             }
             .navigationTitle("Mi Canasta")
-            .toolbar {
-                if !carrito.isEmpty {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Vaciar") { cartItemsData = Data() }
-                            .foregroundColor(.red)
-                    }
-                }
-            }
         }
     }
     
@@ -93,17 +125,17 @@ struct SavingsBasketView: View {
     
     func eliminarProducto(de tienda: String, en offsets: IndexSet) {
         let itemsEnTienda = productosAgrupados[tienda] ?? []
+        var actual = carrito
+        
         for index in offsets {
             let itemAEliminar = itemsEnTienda[index]
-            if let indexOriginal = carrito.firstIndex(where: { $0.id == itemAEliminar.id }) {
-                var actual = carrito
+            if let indexOriginal = actual.firstIndex(where: { $0.id == itemAEliminar.id }) {
                 actual.remove(at: indexOriginal)
-                
-                // FIX: Guardamos directamente en la variable en memoria
-                if let encoded = try? JSONEncoder().encode(actual) {
-                    cartItemsData = encoded
-                }
             }
+        }
+        
+        if let encoded = try? JSONEncoder().encode(actual) {
+            cartItemsData = encoded
         }
     }
 }
