@@ -1,19 +1,15 @@
 import SwiftUI
-import SwiftData
+import FirebaseFirestore // Importamos Firestore
 
 struct ScannerView: View {
-    @Environment(\.modelContext) private var modelContext
     @State private var isShowingForm = false
     
-    // Variables limpias sin hardcodear
     @State private var productName = ""
     @State private var price = ""
     @State private var selectedStore = "Seleccionar..."
     @State private var customStore = ""
     
     let stores = ["Seleccionar...", "Soriana", "H-E-B", "Walmart", "Bodega Aurrera", "Mercado Local", "Otra"]
-    
-    // Teclado
     @FocusState private var isInputActive: Bool
     
     var body: some View {
@@ -35,7 +31,6 @@ struct ScannerView: View {
                         .foregroundColor(.white.opacity(0.3))
                 }
                 .onTapGesture {
-                    // Limpiamos los campos antes de mostrar el formulario
                     productName = ""
                     price = ""
                     selectedStore = "Seleccionar..."
@@ -45,7 +40,6 @@ struct ScannerView: View {
                 
                 Text("Apunta al código y toca la cámara para simular")
                     .padding()
-                
                 Spacer()
             }
             .navigationTitle("Escanear Producto")
@@ -56,20 +50,17 @@ struct ScannerView: View {
                             TextField("Nombre del producto", text: $productName)
                                 .focused($isInputActive)
                         }
-                        
                         Section(header: Text("Precio Actual")) {
                             TextField("Precio", text: $price)
                                 .keyboardType(.decimalPad)
                                 .focused($isInputActive)
                         }
-                        
                         Section(header: Text("Comercio")) {
                             Picker("Selecciona la tienda", selection: $selectedStore) {
                                 ForEach(stores, id: \.self) {
                                     Text($0)
                                 }
                             }
-                            
                             if selectedStore == "Otra" {
                                 TextField("Nombre de la tienda", text: $customStore)
                                     .focused($isInputActive)
@@ -86,7 +77,8 @@ struct ScannerView: View {
                             Button("Cancelar") { isShowingForm = false }
                         }
                         ToolbarItem(placement: .navigationBarTrailing) {
-                            Button("Guardar") { guardarProducto() }
+                            // Cambiamos el botón para llamar a Firebase
+                            Button("Guardar") { guardarProductoEnFirebase() }
                         }
                     }
                 }
@@ -94,12 +86,34 @@ struct ScannerView: View {
         }
     }
     
-    func guardarProducto() {
+    func guardarProductoEnFirebase() {
         let finalStore = selectedStore == "Otra" ? customStore : selectedStore
-        if let priceValue = Double(price), !productName.isEmpty, finalStore != "Seleccionar...", !finalStore.isEmpty {
-            let newItem = ProductItem(name: productName, store: finalStore, price: priceValue)
-            modelContext.insert(newItem)
-            isShowingForm = false
+        
+        // Validamos que los datos sean correctos antes de enviarlos
+        guard let priceValue = Double(price),
+              !productName.isEmpty,
+              finalStore != "Seleccionar...",
+              !finalStore.isEmpty else { return }
+        
+        // 1. Instanciamos Firestore
+        let db = Firestore.firestore()
+        
+        // 2. Creamos un diccionario con la estructura de nuestro documento
+        let nuevoProducto: [String: Any] = [
+            "nombre": productName.lowercased(), // Minúsculas para facilitar búsquedas
+            "tienda": finalStore,
+            "precio": priceValue,
+            "fechaRegistro": FieldValue.serverTimestamp() // Sello de tiempo automático
+        ]
+        
+        // 3. Insertamos el documento en la colección "productos"
+        db.collection("productos").addDocument(data: nuevoProducto) { error in
+            if let error = error {
+                print("Error al guardar en Firestore: \(error.localizedDescription)")
+            } else {
+                print("¡Producto insertado exitosamente en la nube!")
+                isShowingForm = false
+            }
         }
     }
 }
