@@ -6,6 +6,11 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		D27FA0D93061FF0C00C48E28 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = D27FA0D83061FF0C00C48E28 /* FirebaseAuth */; };
+		D27FA0DB3061FF0C00C48E28 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = D27FA0DA3061FF0C00C48E28 /* FirebaseFirestore */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		D29A5A1D303E5C9E00D0D41B /* PowerPrice.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PowerPrice.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,6 +28,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				D27FA0D93061FF0C00C48E28 /* FirebaseAuth in Frameworks */,
+				D27FA0DB3061FF0C00C48E28 /* FirebaseFirestore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +72,8 @@
 			);
 			name = PowerPrice;
 			packageProductDependencies = (
+				D27FA0D83061FF0C00C48E28 /* FirebaseAuth */,
+				D27FA0DA3061FF0C00C48E28 /* FirebaseFirestore */,
 			);
 			productName = PowerPrice;
 			productReference = D29A5A1D303E5C9E00D0D41B /* PowerPrice.app */;
@@ -94,6 +103,9 @@
 			);
 			mainGroup = D29A5A14303E5C9E00D0D41B;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				D27FA0D73061FF0C00C48E28 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = D29A5A1E303E5C9E00D0D41B /* Products */;
 			projectDirPath = "";
@@ -259,7 +271,8 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Se requiere camara para escanear los productos";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Requerimos acceso a tu cámara para escanear los códigos de barras de los productos.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Requerimos tu ubicación para mostrarte los precios más baratos en los supermercados cerca de ti.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -305,7 +318,8 @@
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Se requiere camara para escanear los productos";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Requerimos acceso a tu cámara para escanear los códigos de barras de los productos.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Requerimos tu ubicación para mostrarte los precios más baratos en los supermercados cerca de ti.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -359,6 +373,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		D27FA0D73061FF0C00C48E28 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = exactVersion;
+				version = 10.29.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		D27FA0D83061FF0C00C48E28 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D27FA0D73061FF0C00C48E28 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		D27FA0DA3061FF0C00C48E28 /* FirebaseFirestore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = D27FA0D73061FF0C00C48E28 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFirestore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = D29A5A15303E5C9E00D0D41B /* Project object */;
 }
