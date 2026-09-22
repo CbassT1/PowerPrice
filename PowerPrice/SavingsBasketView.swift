@@ -1,50 +1,65 @@
 import SwiftUI
-import SwiftData
 
 struct SavingsBasketView: View {
-    @Query(filter: #Predicate<ProductItem> { $0.isSavedInBasket }) private var basketItems: [ProductItem]
+    // Leemos la misma variable de @AppStorage usando el separador "|"
+    @AppStorage("carritoGuardado") private var carritoGuardadoData: String = ""
     
-    var groupedItems: [String: [ProductItem]] {
-        Dictionary(grouping: basketItems, by: { $0.store })
+    var carrito: [String] {
+        get { carritoGuardadoData.isEmpty ? [] : carritoGuardadoData.components(separatedBy: "|") }
+        set { carritoGuardadoData = newValue.joined(separator: "|") }
     }
     
     var body: some View {
         NavigationStack {
-            List {
-                ForEach(Array(groupedItems.keys.sorted()), id: \.self) { store in
-                    Section(header: Text(store)) {
-                        ForEach(groupedItems[store] ?? []) { item in
-                            HStack {
-                                Text(item.name)
-                                Spacer()
-                                Text("$\(item.price, specifier: "%.2f")")
-                                    .foregroundColor(.secondary)
-                            }
+            ZStack {
+                Color(UIColor.systemGroupedBackground).ignoresSafeArea()
+                
+                VStack {
+                    if carrito.isEmpty {
+                        VStack(spacing: 20) {
+                            Image(systemName: "cart")
+                                .font(.system(size: 60))
+                                .foregroundColor(.gray)
+                            Text("Tu canasta está vacía")
+                                .font(.headline)
+                                .foregroundColor(.gray)
                         }
-                        HStack {
-                            Text("Subtotal en \(store):")
-                                .bold()
-                            Spacer()
-                            Text("$\(calculateSubtotal(for: store), specifier: "%.2f")")
-                                .bold()
-                                .foregroundColor(.green)
+                        .padding(.top, 100)
+                        Spacer()
+                    } else {
+                        List {
+                            ForEach(carrito, id: \.self) { item in
+                                HStack {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.green)
+                                    Text(item)
+                                        .font(.subheadline)
+                                }
+                                .padding(.vertical, 4)
+                            }
+                            .onDelete(perform: eliminarProducto)
                         }
                     }
                 }
             }
             .navigationTitle("Mi Canasta")
-            .overlay {
-                if basketItems.isEmpty {
-                    Text("Escanea productos para armar tu lista")
-                        .foregroundColor(.gray)
+            .toolbar {
+                if !carrito.isEmpty {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Vaciar") {
+                            carritoGuardadoData = ""
+                        }
+                        .foregroundColor(.red)
+                    }
                 }
             }
         }
     }
     
-    func calculateSubtotal(for store: String) -> Double {
-        let items = groupedItems[store] ?? []
-        return items.reduce(0) { $0 + $1.price }
+    func eliminarProducto(at offsets: IndexSet) {
+        var actual = carrito
+        actual.remove(atOffsets: offsets)
+        carritoGuardadoData = actual.joined(separator: "|")
     }
 }
 

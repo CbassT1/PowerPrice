@@ -15,80 +15,134 @@ struct ContentView: View {
     @State private var results: [StoreResult] = []
     @State private var isLoading = false
     
+    // Feedback visual
+    @State private var showAddedAlert = false
+    @State private var addedItemName = ""
+    
+    // Memoria local (usamos | como separador para evitar conflictos con comas)
+    @AppStorage("carritoGuardado") private var carritoGuardadoData: String = ""
+    
+    var carrito: [String] {
+        get { carritoGuardadoData.isEmpty ? [] : carritoGuardadoData.components(separatedBy: "|") }
+        set { carritoGuardadoData = newValue.joined(separator: "|") }
+    }
+    
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                HStack {
-                    TextField("Buscar producto por nombre...", text: $searchInput)
-                        .textFieldStyle(.roundedBorder)
-                        .autocapitalization(.none)
-                    
-                    Button(action: {
-                        buscarProductoEnFirebase()
-                    }) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.title2)
-                            .foregroundColor(.white)
-                            .padding(8)
-                            .background(Color.blue)
-                            .cornerRadius(8)
-                    }
-                }
-                .padding(.horizontal)
+            ZStack {
+                Color(UIColor.systemGroupedBackground).ignoresSafeArea()
                 
-                if !activeProduct.isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Resultados para:")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text(activeProduct.capitalized)
-                            .font(.title2)
-                            .bold()
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal)
-                }
-                
-                if isLoading {
-                    ProgressView("Buscando en la nube...")
-                        .padding(.top, 40)
-                    Spacer()
-                } else if results.isEmpty && !activeProduct.isEmpty {
-                    Text("No se encontraron precios para este producto.")
-                        .foregroundColor(.gray)
-                        .padding(.top, 40)
-                    Spacer()
-                } else {
-                    List(results) { item in
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(item.storeName)
-                                    .font(.headline)
-                                Text("Distancia: \(item.distance)")
-                                    .font(.subheadline)
-                                    .foregroundColor(.gray)
-                            }
-                            Spacer()
-                            VStack(alignment: .trailing) {
-                                Text("$\(item.price, specifier: "%.2f")")
-                                    .font(.title3)
-                                    .bold()
-                                    .foregroundColor(item.isBestPrice ? .green : .primary)
-                                
-                                if item.isBestPrice {
-                                    Text("¡Más barato!")
-                                        .font(.caption2)
-                                        .bold()
-                                        .foregroundColor(.green)
-                                }
-                            }
+                VStack(spacing: 16) {
+                    HStack {
+                        TextField("Buscar producto...", text: $searchInput)
+                            .textFieldStyle(.roundedBorder)
+                            .autocapitalization(.none)
+                        
+                        Button(action: { buscarProductoEnFirebase() }) {
+                            Image(systemName: "magnifyingglass")
+                                .font(.title2)
+                                .foregroundColor(.white)
+                                .padding(8)
+                                .background(Color.blue)
+                                .cornerRadius(8)
                         }
-                        .padding(.vertical, 4)
                     }
-                    .listStyle(.insetGrouped)
+                    .padding(.horizontal)
+                    .padding(.top, 10)
+                    
+                    if !activeProduct.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Resultados para:")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text(activeProduct.capitalized)
+                                .font(.title2)
+                                .bold()
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal)
+                    }
+                    
+                    if isLoading {
+                        ProgressView("Buscando en la nube...")
+                            .padding(.top, 40)
+                        Spacer()
+                    } else if results.isEmpty && !activeProduct.isEmpty {
+                        Text("No se encontraron precios para este producto.")
+                            .foregroundColor(.gray)
+                            .padding(.top, 40)
+                        Spacer()
+                    } else {
+                        List(results) { item in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text(item.storeName)
+                                        .font(.headline)
+                                        .foregroundColor(.primary)
+                                    
+                                    HStack {
+                                        Image(systemName: "location.fill")
+                                            .foregroundColor(.gray)
+                                        Text(item.distance)
+                                            .font(.subheadline)
+                                            .foregroundColor(.gray)
+                                    }
+                                }
+                                
+                                Spacer()
+                                
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text("$\(item.price, specifier: "%.2f")")
+                                        .font(.title2)
+                                        .bold()
+                                        .foregroundColor(item.isBestPrice ? .green : .primary)
+                                    
+                                    if item.isBestPrice {
+                                        Text("Mejor Opción")
+                                            .font(.caption)
+                                            .bold()
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 4)
+                                            .background(Color.green.opacity(0.2))
+                                            .foregroundColor(.green)
+                                            .clipShape(Capsule())
+                                    }
+                                }
+                                
+                                Button(action: {
+                                    let itemString = "\(activeProduct.capitalized) en \(item.storeName): $\(String(format: "%.2f", item.price))"
+                                    var actual = carrito
+                                    actual.append(itemString)
+                                    carritoGuardadoData = actual.joined(separator: "|")
+                                    
+                                    addedItemName = activeProduct.capitalized
+                                    showAddedAlert = true
+                                }) {
+                                    Image(systemName: "cart.badge.plus")
+                                        .font(.title2)
+                                        .foregroundColor(.blue)
+                                        .padding(.leading, 10)
+                                }
+                                .buttonStyle(BorderlessButtonStyle())
+                            }
+                            .padding()
+                            .background(Color(UIColor.secondarySystemGroupedBackground))
+                            .cornerRadius(16)
+                            .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                            .padding(.vertical, 4)
+                        }
+                        .listStyle(.plain)
+                    }
                 }
             }
             .navigationTitle("PowerPrice")
+            .alert("Agregado a la canasta", isPresented: $showAddedAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("\(addedItemName) se añadió correctamente.")
+            }
         }
     }
     
@@ -101,9 +155,9 @@ struct ContentView: View {
         results.removeAll()
         
         let db = Firestore.firestore()
-        // Buscamos productos que coincidan con el nombre
         db.collection("productos")
-          .whereField("nombre", isEqualTo: query)
+          .whereField("nombre", isGreaterThanOrEqualTo: query)
+          .whereField("nombre", isLessThanOrEqualTo: query + "\u{f8ff}")
           .getDocuments { snapshot, error in
             isLoading = false
             
@@ -122,20 +176,14 @@ struct ContentView: View {
                 let store = data["tienda"] as? String ?? "Desconocido"
                 let price = data["precio"] as? Double ?? 0.0
                 
-                // Mantenemos registro del precio más bajo
                 if price < minPrice { minPrice = price }
-                
                 fetchedResults.append(StoreResult(id: doc.documentID, storeName: store, distance: "A calcular", price: price, isBestPrice: false))
             }
             
-            // Marcamos el más barato
             for i in 0..<fetchedResults.count {
-                if fetchedResults[i].price == minPrice {
-                    fetchedResults[i].isBestPrice = true
-                }
+                if fetchedResults[i].price == minPrice { fetchedResults[i].isBestPrice = true }
             }
             
-            // Ordenamos la lista del más barato al más caro
             results = fetchedResults.sorted(by: { $0.price < $1.price })
         }
     }

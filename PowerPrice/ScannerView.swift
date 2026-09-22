@@ -1,8 +1,10 @@
 import SwiftUI
-import FirebaseFirestore // Importamos Firestore
+import FirebaseFirestore
+import AVFoundation
 
 struct ScannerView: View {
     @State private var isShowingForm = false
+    @State private var cameraPermissionGranted = false
     
     @State private var productName = ""
     @State private var price = ""
@@ -16,9 +18,21 @@ struct ScannerView: View {
         NavigationStack {
             VStack {
                 ZStack {
-                    CameraPreview()
-                        .frame(maxWidth: .infinity, maxHeight: 400)
-                        .clipped()
+                    if cameraPermissionGranted {
+                        CameraPreview()
+                            .frame(maxWidth: .infinity, maxHeight: 400)
+                            .clipped()
+                    } else {
+                        Rectangle()
+                            .fill(Color.black.opacity(0.8))
+                            .frame(maxWidth: .infinity, maxHeight: 400)
+                            .overlay(
+                                Text("Se requiere acceso a la cámara para escanear.")
+                                    .foregroundColor(.white)
+                                    .multilineTextAlignment(.center)
+                                    .padding()
+                            )
+                    }
                     
                     RoundedRectangle(cornerRadius: 12)
                         .stroke(Color.green, lineWidth: 3)
@@ -38,11 +52,15 @@ struct ScannerView: View {
                     isShowingForm = true
                 }
                 
-                Text("Apunta al código y toca la cámara para simular")
+                Text("Apunta al código y toca la cámara para capturar manualmente")
                     .padding()
+                
                 Spacer()
             }
             .navigationTitle("Escanear Producto")
+            .onAppear {
+                checkCameraPermission()
+            }
             .sheet(isPresented: $isShowingForm) {
                 NavigationStack {
                     Form {
@@ -50,17 +68,20 @@ struct ScannerView: View {
                             TextField("Nombre del producto", text: $productName)
                                 .focused($isInputActive)
                         }
+                        
                         Section(header: Text("Precio Actual")) {
                             TextField("Precio", text: $price)
                                 .keyboardType(.decimalPad)
                                 .focused($isInputActive)
                         }
+                        
                         Section(header: Text("Comercio")) {
                             Picker("Selecciona la tienda", selection: $selectedStore) {
                                 ForEach(stores, id: \.self) {
                                     Text($0)
                                 }
                             }
+                            
                             if selectedStore == "Otra" {
                                 TextField("Nombre de la tienda", text: $customStore)
                                     .focused($isInputActive)
@@ -77,7 +98,6 @@ struct ScannerView: View {
                             Button("Cancelar") { isShowingForm = false }
                         }
                         ToolbarItem(placement: .navigationBarTrailing) {
-                            // Cambiamos el botón para llamar a Firebase
                             Button("Guardar") { guardarProductoEnFirebase() }
                         }
                     }
@@ -86,32 +106,59 @@ struct ScannerView: View {
         }
     }
     
+    func checkCameraPermission() {
+        let status = AVCaptureDevice.authorizationStatus(for: .video)
+        
+        switch status {
+        case .authorized:
+            cameraPermissionGranted = true
+        case .notDetermined:
+            AVCaptureDevice.requestAccess(for: .video) { granted in
+                DispatchQueue.main.async {
+                    self.cameraPermissionGranted = granted
+                }
+            }
+        default:
+            cameraPermissionGranted = false
+        }
+    }
+    
     func guardarProductoEnFirebase() {
         let finalStore = selectedStore == "Otra" ? customStore : selectedStore
         
-        // Validamos que los datos sean correctos antes de enviarlos
+        // 1. Limpiamos espacios en blanco al inicio y al final
+        let safeProduct = productName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let safeStore = finalStore.trimmingCharacters(in: .whitespacesAndNewlines)
+        
         guard let priceValue = Double(price),
-              !productName.isEmpty,
-              finalStore != "Seleccionar...",
-              !finalStore.isEmpty else { return }
+              !safeProduct.isEmpty,
+              safeStore != "Seleccionar...",
+              !safeStore.isEmpty else { return }
         
-        // 1. Instanciamos Firestore
+        // 2. Generamos el ID con los textos limpios
+        let textoNormalizado = "\(safeProduct)_\(safeStore)"
+            .lowercased()
+            .folding(options: .diacriticInsensitive, locale: .current)
+            .replacingOccurrences(of: " ", with: "_")
+        
         let db = Firestore.firestore()
-        
-        // 2. Creamos un diccionario con la estructura de nuestro documento
         let nuevoProducto: [String: Any] = [
-            "nombre": productName.lowercased(), // Minúsculas para facilitar búsquedas
-            "tienda": finalStore,
+            "nombre": safeProduct.lowercased(),
+            "tienda": safeStore,
             "precio": priceValue,
-            "fechaRegistro": FieldValue.serverTimestamp() // Sello de tiempo automático
+            "fechaRegistro": FieldValue.serverTimestamp()
         ]
         
-        // 3. Insertamos el documento en la colección "productos"
-        db.collection("productos").addDocument(data: nuevoProducto) { error in
+        // Al usar setData con merge: true, sobrescribe el precio si el producto ya existe
+        db.collection("productos").document(textoNormalizado).setData(nuevoProducto, merge: true) { error in
             if let error = error {
-                print("Error al guardar en Firestore: \(error.localizedDescription)")
+                print("Error al guardar: \(error.localizedDescription)")
             } else {
-                print("¡Producto insertado exitosamente en la nube!")
+                print("¡Producto guardado exitosamente!")
+                productName = ""
+                price = ""
+                selectedStore = "Seleccionar..."
+                customStore = ""
                 isShowingForm = false
             }
         }
