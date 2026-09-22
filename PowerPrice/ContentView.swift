@@ -3,8 +3,9 @@ import FirebaseFirestore
 
 struct StoreResult: Identifiable {
     let id: String
+    let productName: String // Agregado para diferenciar productos
     let storeName: String
-    let distance: String
+    var distance: String
     let price: Double
     var isBestPrice: Bool
 }
@@ -12,80 +13,191 @@ struct StoreResult: Identifiable {
 struct ContentView: View {
     @State private var searchInput: String = ""
     @State private var activeProduct: String = ""
-    @State private var results: [StoreResult] = []
+    @State private var allFetchedResults: [StoreResult] = []
     @State private var isLoading = false
     
-    // Feedback visual
+    // Autocompletado
+    @State private var suggestions: [String] = []
+    
+    // Filtros
+    @State private var filterFavorites = false
+    @State private var filterCheapest = false
+    @State private var filterNearest = false
+    
+    @StateObject private var locationManager = LocationManager()
+    
     @State private var showAddedAlert = false
     @State private var addedItemName = ""
     
-    // Memoria local (usamos | como separador para evitar conflictos con comas)
-    @AppStorage("carritoGuardado") private var carritoGuardadoData: String = ""
+    @AppStorage("favoriteStores") private var favoriteStoresData: String = ""
+    @AppStorage("cartItemsData") private var cartItemsData: Data = Data()
     
-    var carrito: [String] {
-        get { carritoGuardadoData.isEmpty ? [] : carritoGuardadoData.components(separatedBy: "|") }
-        set { carritoGuardadoData = newValue.joined(separator: "|") }
+    var tiendasFavoritas: [String] {
+        favoriteStoresData.isEmpty ? [] : favoriteStoresData.components(separatedBy: ",")
+    }
+    
+    var carrito: [CartItem] {
+        get {
+            if let decoded = try? JSONDecoder().decode([CartItem].self, from: cartItemsData) { return decoded }
+            return []
+        }
+    }
+    
+    var results: [StoreResult] {
+        var filteredList = allFetchedResults
+        
+        if filterFavorites {
+            filteredList = filteredList.filter { tiendasFavoritas.contains($0.storeName) }
+        }
+        
+        if filterNearest, locationManager.isAuthorized {
+            filteredList = filteredList.map { item in
+                var updatedItem = item
+                if let km = locationManager.distanceTo(storeName: item.storeName) {
+                    updatedItem.distance = String(format: "%.1f km", km)
+                } else {
+                    updatedItem.distance = "Calculando..."
+                }
+                return updatedItem
+            }
+            filteredList.sort {
+                let dist1 = Double($0.distance.replacingOccurrences(of: " km", with: "")) ?? 999
+                let dist2 = Double($1.distance.replacingOccurrences(of: " km", with: "")) ?? 999
+                return dist1 < dist2
+            }
+        }
+        
+        if !filteredList.isEmpty {
+            let minPrice = filteredList.map { $0.price }.min() ?? 0
+            if filterCheapest {
+                filteredList = filteredList.filter { $0.price == minPrice }
+            }
+            for i in 0..<filteredList.count {
+                filteredList[i].isBestPrice = (filteredList[i].price == minPrice)
+            }
+        }
+        
+        if !filterNearest {
+            filteredList.sort(by: { $0.price < $1.price })
+        }
+        
+        return filteredList
     }
     
     var body: some View {
         NavigationStack {
             ZStack {
                 Color(UIColor.systemGroupedBackground).ignoresSafeArea()
+                    .onTapGesture { hideKeyboard() }
                 
-                VStack(spacing: 16) {
-                    HStack {
-                        TextField("Buscar producto...", text: $searchInput)
-                            .textFieldStyle(.roundedBorder)
-                            .autocapitalization(.none)
+                VStack(spacing: 12) {
+                    // Barra de búsqueda con sugerencias en vivo
+                    VStack(spacing: 0) {
+                        HStack {
+                            TextField("Buscar producto (ej. Leche)", text: $searchInput)
+                                .textFieldStyle(.roundedBorder)
+                                .autocapitalization(.none)
+                                .onChange(of: searchInput) { newValue in
+                                    buscarSugerencias(query: newValue)
+                                }
+                            
+                            Button(action: {
+                                hideKeyboard()
+                                suggestions.removeAll()
+                                buscarProductoEnFirebase(query: searchInput)
+                            }) {
+                                Image(systemName: "magnifyingglass")
+                                    .font(.title2)
+                                    .foregroundColor(.white)
+                                    .padding(8)
+                                    .background(Color.blue)
+                                    .cornerRadius(8)
+                            }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 10)
                         
-                        Button(action: { buscarProductoEnFirebase() }) {
-                            Image(systemName: "magnifyingglass")
-                                .font(.title2)
-                                .foregroundColor(.white)
-                                .padding(8)
-                                .background(Color.blue)
-                                .cornerRadius(8)
+                        // Lista desplegable de autocompletado
+                        if !suggestions.isEmpty {
+                            VStack(spacing: 0) {
+                                ForEach(suggestions, id: \.self) { sug in
+                                    Button(action: {
+                                        searchInput = sug.capitalized
+                                        suggestions.removeAll()
+                                        hideKeyboard()
+                                        buscarProductoEnFirebase(query: sug)
+                                    }) {
+                                        HStack {
+                                            Text(sug.capitalized)
+                                                .foregroundColor(.primary)
+                                            Spacer()
+                                            Image(systemName: "arrow.up.backward")
+                                                .foregroundColor(.gray)
+                                                .font(.caption)
+                                        }
+                                        .padding(.horizontal)
+                                        .padding(.vertical, 12)
+                                        .background(Color(UIColor.secondarySystemGroupedBackground))
+                                    }
+                                    Divider()
+                                }
+                            }
+                            .background(Color(UIColor.secondarySystemGroupedBackground))
+                            .cornerRadius(10)
+                            .shadow(color: .black.opacity(0.1), radius: 5, y: 5)
+                            .padding(.horizontal)
+                            .padding(.top, 5)
+                            .zIndex(1) // Mantiene las sugerencias por encima de los filtros
                         }
                     }
-                    .padding(.horizontal)
-                    .padding(.top, 10)
                     
-                    if !activeProduct.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Resultados para:")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text(activeProduct.capitalized)
-                                .font(.title2)
-                                .bold()
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            FilterChip(title: "Mis Favoritos", icon: "heart.fill", isSelected: $filterFavorites)
+                            FilterChip(title: "Más Barato", icon: "dollarsign.circle.fill", isSelected: $filterCheapest)
+                            FilterChip(title: "Más Cerca", icon: "location.fill", isSelected: $filterNearest)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.horizontal)
                     }
+                    .zIndex(0)
                     
                     if isLoading {
                         ProgressView("Buscando en la nube...")
                             .padding(.top, 40)
                         Spacer()
                     } else if results.isEmpty && !activeProduct.isEmpty {
-                        Text("No se encontraron precios para este producto.")
+                        Text("No se encontraron precios que coincidan.")
                             .foregroundColor(.gray)
                             .padding(.top, 40)
                         Spacer()
                     } else {
                         List(results) { item in
                             HStack {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(item.storeName)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    // Ahora mostramos el nombre exacto del producto
+                                    Text(item.productName)
                                         .font(.headline)
                                         .foregroundColor(.primary)
+                                        .lineLimit(2)
                                     
                                     HStack {
-                                        Image(systemName: "location.fill")
+                                        Image(systemName: "storefront.fill")
                                             .foregroundColor(.gray)
-                                        Text(item.distance)
+                                            .font(.caption)
+                                        Text(item.storeName)
                                             .font(.subheadline)
-                                            .foregroundColor(.gray)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    
+                                    if filterNearest {
+                                        HStack {
+                                            Image(systemName: "location.fill")
+                                                .foregroundColor(.gray)
+                                                .font(.caption)
+                                            Text(item.distance)
+                                                .font(.caption)
+                                                .foregroundColor(.gray)
+                                        }
                                     }
                                 }
                                 
@@ -110,12 +222,15 @@ struct ContentView: View {
                                 }
                                 
                                 Button(action: {
-                                    let itemString = "\(activeProduct.capitalized) en \(item.storeName): $\(String(format: "%.2f", item.price))"
+                                    let newItem = CartItem(name: item.productName, store: item.storeName, price: item.price)
                                     var actual = carrito
-                                    actual.append(itemString)
-                                    carritoGuardadoData = actual.joined(separator: "|")
+                                    actual.append(newItem)
                                     
-                                    addedItemName = activeProduct.capitalized
+                                    if let encoded = try? JSONEncoder().encode(actual) {
+                                        cartItemsData = encoded
+                                    }
+                                    
+                                    addedItemName = item.productName
                                     showAddedAlert = true
                                 }) {
                                     Image(systemName: "cart.badge.plus")
@@ -138,6 +253,7 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("PowerPrice")
+            .onAppear { locationManager.requestPermission() }
             .alert("Agregado a la canasta", isPresented: $showAddedAlert) {
                 Button("OK", role: .cancel) { }
             } message: {
@@ -146,45 +262,79 @@ struct ContentView: View {
         }
     }
     
-    func buscarProductoEnFirebase() {
-        let query = searchInput.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return }
-        
-        activeProduct = query
-        isLoading = true
-        results.removeAll()
+    // Función para el autocompletado rápido
+    func buscarSugerencias(query: String) {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if text.count < 2 {
+            suggestions.removeAll()
+            return
+        }
         
         let db = Firestore.firestore()
         db.collection("productos")
-          .whereField("nombre", isGreaterThanOrEqualTo: query)
-          .whereField("nombre", isLessThanOrEqualTo: query + "\u{f8ff}")
+          .whereField("nombre", isGreaterThanOrEqualTo: text)
+          .whereField("nombre", isLessThanOrEqualTo: text + "\u{f8ff}")
+          .limit(to: 5)
+          .getDocuments { snapshot, error in
+              guard let documents = snapshot?.documents else { return }
+              
+              // Extraemos los nombres y usamos Set para eliminar duplicados (ej. si hay 5 leches lala en distintas tiendas)
+              let names = documents.compactMap { $0.data()["nombre"] as? String }
+              let uniqueNames = Array(Set(names)).sorted()
+              self.suggestions = uniqueNames
+          }
+    }
+    
+    func buscarProductoEnFirebase(query: String) {
+        let text = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !text.isEmpty else { return }
+        
+        activeProduct = text
+        isLoading = true
+        allFetchedResults.removeAll()
+        
+        let db = Firestore.firestore()
+        db.collection("productos")
+          .whereField("nombre", isGreaterThanOrEqualTo: text)
+          .whereField("nombre", isLessThanOrEqualTo: text + "\u{f8ff}")
           .getDocuments { snapshot, error in
             isLoading = false
-            
-            if let error = error {
-                print("Error al buscar: \(error.localizedDescription)")
-                return
-            }
-            
             guard let documents = snapshot?.documents else { return }
             
-            var fetchedResults: [StoreResult] = []
-            var minPrice: Double = .greatestFiniteMagnitude
+            var fetched: [StoreResult] = []
             
             for doc in documents {
                 let data = doc.data()
+                let prodName = data["nombre"] as? String ?? "Desconocido"
                 let store = data["tienda"] as? String ?? "Desconocido"
                 let price = data["precio"] as? Double ?? 0.0
-                
-                if price < minPrice { minPrice = price }
-                fetchedResults.append(StoreResult(id: doc.documentID, storeName: store, distance: "A calcular", price: price, isBestPrice: false))
+                fetched.append(StoreResult(id: doc.documentID, productName: prodName.capitalized, storeName: store, distance: "A calcular", price: price, isBestPrice: false))
             }
-            
-            for i in 0..<fetchedResults.count {
-                if fetchedResults[i].price == minPrice { fetchedResults[i].isBestPrice = true }
+            allFetchedResults = fetched
+        }
+    }
+}
+
+struct FilterChip: View {
+    let title: String
+    let icon: String
+    @Binding var isSelected: Bool
+    
+    var body: some View {
+        Button(action: {
+            withAnimation { isSelected.toggle() }
+        }) {
+            HStack(spacing: 6) {
+                Image(systemName: icon)
+                Text(title)
             }
-            
-            results = fetchedResults.sorted(by: { $0.price < $1.price })
+            .font(.subheadline)
+            .bold(isSelected)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(isSelected ? Color.blue : Color.gray.opacity(0.15))
+            .foregroundColor(isSelected ? .white : .primary)
+            .clipShape(Capsule())
         }
     }
 }
