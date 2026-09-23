@@ -11,9 +11,10 @@ struct ScannerView: View {
     @State private var price = ""
     @State private var selectedStore = "Seleccionar..."
     
-    // Variables para el buscador de supermercados
-    @State private var stores: [String] = ["Cargando supermercados..."]
+    // Variables para el buscador de supermercados corregidas
+    @State private var stores: [String] = [] // Ya no tiene el texto quemado
     @State private var showingStoreSearch = false
+    @State private var isLoadingStores = true // Nueva variable para controlar la carga
     
     @FocusState private var isInputActive: Bool
     
@@ -114,7 +115,8 @@ struct ScannerView: View {
                     .sheet(isPresented: $showingStoreSearch) {
                         StoreScannerSelectionView(
                             tiendasDisponibles: stores,
-                            selectedStore: $selectedStore
+                            selectedStore: $selectedStore,
+                            isLoading: isLoadingStores // Se pasa la variable de estado
                         )
                     }
                 }
@@ -139,10 +141,11 @@ struct ScannerView: View {
     func cargarSupermercados() {
         let db = Firestore.firestore()
         db.collection("supermercados").getDocuments { snapshot, error in
-            if let docs = snapshot?.documents {
-                var fetchedStores = docs.compactMap { $0.data()["nombre"] as? String }
-                fetchedStores.sort()
-                if !fetchedStores.isEmpty {
+            DispatchQueue.main.async {
+                self.isLoadingStores = false // Se apaga estrictamente al recibir respuesta
+                if let docs = snapshot?.documents {
+                    var fetchedStores = docs.compactMap { $0.data()["nombre"] as? String }
+                    fetchedStores.sort()
                     self.stores = fetchedStores
                 }
             }
@@ -153,7 +156,13 @@ struct ScannerView: View {
         let safeProduct = productName.trimmingCharacters(in: .whitespacesAndNewlines)
         let safeStore = selectedStore.trimmingCharacters(in: .whitespacesAndNewlines)
         
-        guard let priceValue = Double(price), !safeProduct.isEmpty, safeStore != "Seleccionar...", !safeStore.isEmpty else { return }
+        // Corrección de formato: Reemplaza comas por puntos para evitar que falle el cast a Double
+        let cleanPrice = price.replacingOccurrences(of: ",", with: ".")
+        
+        guard let priceValue = Double(cleanPrice), !safeProduct.isEmpty, safeStore != "Seleccionar...", !safeStore.isEmpty else {
+            print("Datos inválidos o incompletos")
+            return
+        }
         
         let db = Firestore.firestore()
 
@@ -181,10 +190,14 @@ struct ScannerView: View {
             if let error = error {
                 print("Error al guardar: \(error.localizedDescription)")
             } else {
-                productName = ""
-                price = ""
-                selectedStore = "Seleccionar..."
-                isShowingForm = false
+                print("Precio guardado/actualizado exitosamente")
+                // Cerrar interfaz asegurando que se haga en el hilo principal
+                DispatchQueue.main.async {
+                    productName = ""
+                    price = ""
+                    selectedStore = "Seleccionar..."
+                    isShowingForm = false
+                }
             }
         }
     }
@@ -194,6 +207,7 @@ struct StoreScannerSelectionView: View {
     @Environment(\.dismiss) var dismiss
     let tiendasDisponibles: [String]
     @Binding var selectedStore: String
+    var isLoading: Bool // Nueva constante que recibe el estado de Firebase
     
     @State private var searchText = ""
     @State private var showCustomStoreAlert = false
@@ -210,8 +224,14 @@ struct StoreScannerSelectionView: View {
     var body: some View {
         NavigationStack {
             List {
+                // Bug corregido: Muestra el texto de carga solo si la base de datos no ha respondido
+                if isLoading {
+                    Text("Cargando supermercados...")
+                        .foregroundColor(.secondary)
+                }
+                
                 // Buscador inteligente (si no existe, te sugiere crearla)
-                if !searchText.isEmpty && tiendasFiltradas.isEmpty {
+                if !searchText.isEmpty && tiendasFiltradas.isEmpty && !isLoading {
                     Button(action: {
                         selectedStore = searchText
                         dismiss()
