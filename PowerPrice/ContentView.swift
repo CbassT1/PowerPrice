@@ -33,6 +33,7 @@ struct ContentView: View {
     @State private var addedItemName = ""
     
     @AppStorage("favoriteStores") private var favoriteStoresData: String = ""
+    @AppStorage("favoriteProducts") private var favoriteProductsData: String = "" // NUEVO: Memoria para productos
     @AppStorage("cartItemsData") private var cartItemsData: Data = Data()
     
     var tiendasFavoritas: [String] {
@@ -194,6 +195,15 @@ struct ContentView: View {
                                         Button(action: {
                                             if let index = allFetchedResults.firstIndex(where: { $0.id == item.id }) {
                                                 allFetchedResults[index].isFavoriteProduct.toggle()
+                                                
+                                                // NUEVO: Lógica de guardado en AppStorage
+                                                var actual = favoriteProductsData.isEmpty ? [] : favoriteProductsData.components(separatedBy: ",")
+                                                if allFetchedResults[index].isFavoriteProduct {
+                                                    if !actual.contains(item.productName) { actual.append(item.productName) }
+                                                } else {
+                                                    actual.removeAll { $0 == item.productName }
+                                                }
+                                                favoriteProductsData = actual.joined(separator: ",")
                                             }
                                         }) {
                                             Image(systemName: item.isFavoriteProduct ? "star.fill" : "star")
@@ -214,6 +224,15 @@ struct ContentView: View {
                                         Button(action: {
                                             if let index = allFetchedResults.firstIndex(where: { $0.id == item.id }) {
                                                 allFetchedResults[index].isFavoriteStore.toggle()
+                                                
+                                                // NUEVO: Lógica de guardado en AppStorage
+                                                var actual = favoriteStoresData.isEmpty ? [] : favoriteStoresData.components(separatedBy: ",")
+                                                if allFetchedResults[index].isFavoriteStore {
+                                                    if !actual.contains(item.storeName) { actual.append(item.storeName) }
+                                                } else {
+                                                    actual.removeAll { $0 == item.storeName }
+                                                }
+                                                favoriteStoresData = actual.joined(separator: ",")
                                             }
                                         }) {
                                             Image(systemName: item.isFavoriteStore ? "heart.fill" : "heart")
@@ -336,12 +355,21 @@ struct ContentView: View {
             
             var fetched: [StoreResult] = []
             
+            // Verificamos qué elementos ya son favoritos para inicializarlos correctamente
+            let favoritosActualesProductos = favoriteProductsData.isEmpty ? [] : favoriteProductsData.components(separatedBy: ",")
+            let favoritosActualesTiendas = favoriteStoresData.isEmpty ? [] : favoriteStoresData.components(separatedBy: ",")
+            
             for doc in documents {
                 let data = doc.data()
                 let prodName = data["nombre"] as? String ?? "Desconocido"
                 let store = data["tienda"] as? String ?? "Desconocido"
                 let price = data["precio"] as? Double ?? 0.0
-                fetched.append(StoreResult(id: doc.documentID, productName: prodName.capitalized, storeName: store, distance: "A calcular", price: price, isBestPrice: false))
+                
+                let prodCap = prodName.capitalized
+                let isFavProd = favoritosActualesProductos.contains(prodCap)
+                let isFavStore = favoritosActualesTiendas.contains(store)
+                
+                fetched.append(StoreResult(id: doc.documentID, productName: prodCap, storeName: store, distance: "A calcular", price: price, isBestPrice: false, isFavoriteProduct: isFavProd, isFavoriteStore: isFavStore))
             }
             allFetchedResults = fetched
         }
