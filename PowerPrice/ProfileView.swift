@@ -8,7 +8,10 @@ struct ProfileView: View {
     @AppStorage("userName") private var userName: String = ""
     @AppStorage("userEmail") private var userEmail: String = ""
     @AppStorage("profileImageData") private var profileImageData: Data = Data()
+    
+    // Variables de persistencia para favoritos
     @AppStorage("favoriteStores") private var favoriteStoresData: String = ""
+    @AppStorage("favoriteProducts") private var favoriteProductsData: String = ""
     
     @State private var isEditing: Bool = false
     @State private var tempName: String = ""
@@ -21,6 +24,12 @@ struct ProfileView: View {
     var tiendasFavoritas: [String] {
         get { favoriteStoresData.isEmpty ? [] : favoriteStoresData.components(separatedBy: ",") }
         set { favoriteStoresData = newValue.joined(separator: ",") }
+    }
+    
+    // Nueva variable computada para los productos
+    var productosFavoritos: [String] {
+        get { favoriteProductsData.isEmpty ? [] : favoriteProductsData.components(separatedBy: ",") }
+        set { favoriteProductsData = newValue.joined(separator: ",") }
     }
     
     var body: some View {
@@ -85,11 +94,64 @@ struct ProfileView: View {
                         }
                         .padding(.top, 20)
                         
-                        // 2. Tarjeta de Supermercados Favoritos
+                        // 2. Tarjeta de Productos Favoritos (NUEVA SECCIÓN)
                         VStack(alignment: .leading, spacing: 16) {
                             HStack {
                                 Image(systemName: "star.fill")
                                     .foregroundColor(.yellow)
+                                Text("Productos Favoritos")
+                                    .font(.headline)
+                                Spacer()
+                            }
+                            
+                            Divider()
+                            
+                            if productosFavoritos.isEmpty {
+                                Text("Aún no tienes productos agregados.")
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                                    .frame(maxWidth: .infinity, alignment: .center)
+                                    .padding(.vertical, 10)
+                            } else {
+                                let colums = [GridItem(.adaptive(minimum: 140), spacing: 10)]
+                                LazyVGrid(columns: colums, alignment: .leading, spacing: 10) {
+                                    ForEach(productosFavoritos, id: \.self) { producto in
+                                        HStack {
+                                            Text(producto)
+                                                .font(.subheadline)
+                                                .foregroundColor(.primary)
+                                                .lineLimit(1)
+                                            Spacer()
+                                            if isEditing {
+                                                Button(action: {
+                                                    var actual = productosFavoritos
+                                                    actual.removeAll(where: { $0 == producto })
+                                                    favoriteProductsData = actual.joined(separator: ",")
+                                                }) {
+                                                    Image(systemName: "xmark.circle.fill")
+                                                        .foregroundColor(.red.opacity(0.8))
+                                                }
+                                            }
+                                        }
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 10)
+                                        .background(Color(UIColor.systemBackground))
+                                        .cornerRadius(10)
+                                        .shadow(color: .black.opacity(0.05), radius: 3, x: 0, y: 2)
+                                    }
+                                }
+                            }
+                        }
+                        .padding()
+                        .background(Color(UIColor.secondarySystemGroupedBackground))
+                        .cornerRadius(16)
+                        .padding(.horizontal)
+                        
+                        // 3. Tarjeta de Supermercados Favoritos
+                        VStack(alignment: .leading, spacing: 16) {
+                            HStack {
+                                Image(systemName: "heart.fill")
+                                    .foregroundColor(.red)
                                 Text("Supermercados Favoritos")
                                     .font(.headline)
                                 Spacer()
@@ -111,7 +173,6 @@ struct ProfileView: View {
                                     .frame(maxWidth: .infinity, alignment: .center)
                                     .padding(.vertical, 10)
                             } else {
-                                // Diseño de etiquetas (Chips) para los favoritos
                                 let colums = [GridItem(.adaptive(minimum: 140), spacing: 10)]
                                 LazyVGrid(columns: colums, alignment: .leading, spacing: 10) {
                                     ForEach(tiendasFavoritas, id: \.self) { tienda in
@@ -146,7 +207,7 @@ struct ProfileView: View {
                         .cornerRadius(16)
                         .padding(.horizontal)
                         
-                        // 3. Botón de Cerrar Sesión
+                        // 4. Botón de Cerrar Sesión
                         Button(action: cerrarSesion) {
                             HStack {
                                 Image(systemName: "rectangle.portrait.and.arrow.right")
@@ -196,7 +257,7 @@ struct ProfileView: View {
         }
     }
     
-    // Funciones lógicas sin cambios
+    // Funciones lógicas
     func cargarSupermercados() {
         let db = Firestore.firestore()
         db.collection("supermercados").getDocuments { snapshot, error in
@@ -216,7 +277,8 @@ struct ProfileView: View {
         isLoading = true
         Firestore.firestore().collection("usuarios").document(uid).updateData([
             "nombre": tempName,
-            "supermercadosFavoritos": tiendasFavoritas
+            "supermercadosFavoritos": tiendasFavoritas,
+            "productosFavoritos": productosFavoritos // También respaldamos esto en la nube
         ]) { error in
             isLoading = false
             if let error = error { print("Error actualizando perfil: \(error.localizedDescription)") }
@@ -227,12 +289,12 @@ struct ProfileView: View {
         do {
             try Auth.auth().signOut()
             isLoggedIn = false
-            userName = ""; userEmail = ""; favoriteStoresData = ""; profileImageData = Data()
+            userName = ""; userEmail = ""; favoriteStoresData = ""; favoriteProductsData = ""; profileImageData = Data()
         } catch { print("Error: \(error.localizedDescription)") }
     }
 }
 
-// Vista anidada (Buscador de favoritos) se mantiene igual lógicamente, pero con ligeros toques visuales
+// Vista anidada (Buscador de favoritos)
 struct AddFavoriteStoreView: View {
     @Environment(\.dismiss) var dismiss
     let tiendasDisponibles: [String]
